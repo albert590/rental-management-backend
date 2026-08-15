@@ -1,0 +1,59 @@
+import { Logger, Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { MongooseModule } from '@nestjs/mongoose';
+
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
+import { PropertiesModule } from './properties/properties.module';
+import { UnitsModule } from './units/units.module';
+import { TenantsModule } from './tenants/tenants.module';
+import { LeasesModule } from './leases/leases.module';
+import { PaymentsModule } from './payments/payments.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.getOrThrow<string>('MONGODB_URI'),
+
+        connectionFactory: (connection) => {
+          connection.on('connected', () => {
+            Logger.log(
+              'MongoDB connected successfully',
+              'Database',
+            );
+          });
+
+          connection.on('error', (error: Error) => {
+            Logger.error(
+              `MongoDB connection error: ${error.message}`,
+              'Database',
+            );
+          });
+
+          return connection;
+        },
+      }),
+    }),
+
+    UsersModule,
+    AuthModule,
+    PropertiesModule,
+    UnitsModule,
+    TenantsModule,
+    LeasesModule,
+    PaymentsModule,
+    MaintenanceModule,
+    DashboardModule,
+  ],
+})
+export class AppModule {}
