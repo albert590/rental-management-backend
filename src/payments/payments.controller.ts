@@ -1,41 +1,38 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
-  Post,
-  UseGuards,
 } from '@nestjs/common';
 
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentsService } from './payments.service';
 
+import {
+  PaymentStatus,
+} from './schemas/payment.schema';
+
 @Controller('payments')
-@UseGuards(JwtAuthGuard)
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
   ) {}
 
-  @Post()
-  create(
-    @Body() createPaymentDto: CreatePaymentDto,
-  ) {
-    return this.paymentsService.create(
-      createPaymentDto,
-    );
-  }
+  // ==============================
+  // GET ALL PAYMENTS
+  // ==============================
 
   @Get()
-  findAll() {
+  async findAll() {
     return this.paymentsService.findAll();
   }
 
+  // ==============================
+  // GET PAYMENTS BY LEASE
+  // ==============================
+
   @Get('lease/:leaseId')
-  findByLease(
+  async findByLease(
     @Param('leaseId') leaseId: string,
   ) {
     return this.paymentsService.findByLease(
@@ -43,24 +40,59 @@ export class PaymentsController {
     );
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.paymentsService.findOne(id);
-  }
+  // ==============================
+  // GET PAYMENT BY CHECKOUT ID
+  // ==============================
 
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateData: Partial<CreatePaymentDto>,
+  @Get('checkout/:checkoutRequestId')
+  async findByCheckoutRequestId(
+    @Param(
+      'checkoutRequestId',
+    )
+    checkoutRequestId: string,
   ) {
-    return this.paymentsService.update(
-      id,
-      updateData,
+    return this.paymentsService.findByCheckoutRequestId(
+      checkoutRequestId,
     );
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.paymentsService.remove(id);
+  // ==============================
+  // GET PAYMENT BY ID
+  // ==============================
+
+  @Get(':id')
+  async findOne(
+    @Param('id') id: string,
+  ) {
+    return this.paymentsService.findOne(
+      id,
+    );
+  }
+
+  // ==============================
+  // UPDATE PAYMENT STATUS
+  // ==============================
+
+  @Patch(':id/status')
+  async updateStatus(
+    @Param('id') id: string,
+
+    @Body()
+    body: {
+      status: PaymentStatus;
+      resultCode?: string;
+      resultDescription?: string;
+      mpesaReceiptNumber?: string;
+      transactionDate?: string;
+    },
+  ) {
+    return this.paymentsService.updateStatus(
+      id,
+      body.status,
+      body.resultCode,
+      body.resultDescription,
+      body.mpesaReceiptNumber,
+      body.transactionDate,
+    );
   }
 }

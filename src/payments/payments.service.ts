@@ -2,15 +2,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+
+import {
+  Model,
+  Types,
+} from 'mongoose';
 
 import {
   Payment,
   PaymentDocument,
+  PaymentMethod,
+  PaymentStatus,
 } from './schemas/payment.schema';
-
-import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -19,103 +24,261 @@ export class PaymentsService {
     private readonly paymentModel: Model<PaymentDocument>,
   ) {}
 
-  async create(createPaymentDto: CreatePaymentDto) {
-    const payment = await this.paymentModel.create({
-      ...createPaymentDto,
-      lease: new Types.ObjectId(createPaymentDto.lease),
-      paymentDate: new Date(createPaymentDto.paymentDate),
-    });
+  // ==============================
+  // CREATE PAYMENT
+  // ==============================
 
-    return {
-      message: 'Payment created successfully',
-      payment,
-    };
+  async createPayment(data: {
+    lease: string;
+    amount: number;
+    phoneNumber?: string;
+    accountReference?: string;
+    transactionDesc?: string;
+    merchantRequestId?: string;
+    checkoutRequestId?: string;
+    mpesaReceiptNumber?: string;
+    status?: PaymentStatus;
+    paymentMethod?: PaymentMethod;
+    mode?: string;
+    resultCode?: string;
+    resultDescription?: string;
+    transactionDate?: string;
+    reference?: string;
+  }) {
+    if (!Types.ObjectId.isValid(data.lease)) {
+      throw new NotFoundException(
+        'Invalid lease ID',
+      );
+    }
+
+    if (!data.amount || data.amount <= 0) {
+      throw new NotFoundException(
+        'Payment amount must be greater than zero',
+      );
+    }
+
+    const payment =
+      new this.paymentModel({
+        lease: new Types.ObjectId(
+          data.lease,
+        ),
+
+        amount: data.amount,
+
+        paymentDate: new Date(),
+
+        paymentMethod:
+          data.paymentMethod ||
+          PaymentMethod.MPESA,
+
+        reference:
+          data.reference,
+
+        status:
+          data.status ||
+          PaymentStatus.PENDING,
+
+        phoneNumber:
+          data.phoneNumber,
+
+        accountReference:
+          data.accountReference,
+
+        transactionDesc:
+          data.transactionDesc,
+
+        merchantRequestId:
+          data.merchantRequestId,
+
+        checkoutRequestId:
+          data.checkoutRequestId,
+
+        mpesaReceiptNumber:
+          data.mpesaReceiptNumber,
+
+        resultCode:
+          data.resultCode,
+
+        resultDescription:
+          data.resultDescription,
+
+        transactionDate:
+          data.transactionDate,
+
+        mode:
+          data.mode || 'mock',
+      });
+
+    return payment.save();
   }
+
+  // ==============================
+  // GET ALL PAYMENTS
+  // ==============================
 
   async findAll() {
     return this.paymentModel
       .find()
       .populate('lease')
-      .sort({ createdAt: -1 })
+      .sort({
+        createdAt: -1,
+      })
       .exec();
   }
 
-  async findByLease(leaseId: string) {
+  // ==============================
+  // GET PAYMENTS BY LEASE
+  // ==============================
+
+  async findByLease(
+    leaseId: string,
+  ) {
+    if (
+      !Types.ObjectId.isValid(
+        leaseId,
+      )
+    ) {
+      throw new NotFoundException(
+        'Invalid lease ID',
+      );
+    }
+
     return this.paymentModel
       .find({
-        lease: new Types.ObjectId(leaseId),
+        lease: new Types.ObjectId(
+          leaseId,
+        ),
       })
       .populate('lease')
-      .sort({ paymentDate: -1 })
+      .sort({
+        createdAt: -1,
+      })
       .exec();
   }
 
+  // ==============================
+  // GET PAYMENT BY ID
+  // ==============================
+
   async findOne(id: string) {
-    const payment = await this.paymentModel
-      .findById(id)
-      .populate('lease')
-      .exec();
+    if (
+      !Types.ObjectId.isValid(id)
+    ) {
+      throw new NotFoundException(
+        'Invalid payment ID',
+      );
+    }
+
+    const payment =
+      await this.paymentModel
+        .findById(id)
+        .populate('lease')
+        .exec();
 
     if (!payment) {
-      throw new NotFoundException('Payment not found');
+      throw new NotFoundException(
+        'Payment not found',
+      );
     }
 
     return payment;
   }
 
-  async update(
+  // ==============================
+  // UPDATE PAYMENT STATUS
+  // ==============================
+
+  async updateStatus(
     id: string,
-    updateData: Partial<CreatePaymentDto>,
+    status: PaymentStatus,
+    resultCode?: string,
+    resultDescription?: string,
+    mpesaReceiptNumber?: string,
+    transactionDate?: string,
   ) {
-    const payment = await this.paymentModel.findById(id);
-
-    if (!payment) {
-      throw new NotFoundException('Payment not found');
-    }
-
-    if (updateData.lease) {
-      payment.lease = new Types.ObjectId(updateData.lease);
-    }
-
-    if (updateData.amount !== undefined) {
-      payment.amount = updateData.amount;
-    }
-
-    if (updateData.paymentDate) {
-      payment.paymentDate = new Date(
-        updateData.paymentDate,
+    if (
+      !Types.ObjectId.isValid(id)
+    ) {
+      throw new NotFoundException(
+        'Invalid payment ID',
       );
     }
 
-    if (updateData.paymentMethod) {
-      payment.paymentMethod = updateData.paymentMethod;
-    }
-
-    if (updateData.reference) {
-      payment.reference = updateData.reference;
-    }
-
-    if (updateData.status) {
-      payment.status = updateData.status;
-    }
-
-    const updatedPayment = await payment.save();
-
-    return {
-      message: 'Payment updated successfully',
-      payment: updatedPayment,
-    };
-  }
-
-  async remove(id: string) {
-    const payment = await this.paymentModel.findByIdAndDelete(id);
+    const payment =
+      await this.paymentModel.findById(
+        id,
+      );
 
     if (!payment) {
-      throw new NotFoundException('Payment not found');
+      throw new NotFoundException(
+        'Payment not found',
+      );
     }
 
-    return {
-      message: 'Payment deleted successfully',
-    };
+    payment.status = status;
+
+    if (
+      resultCode !== undefined
+    ) {
+      payment.resultCode =
+        resultCode;
+    }
+
+    if (
+      resultDescription !==
+      undefined
+    ) {
+      payment.resultDescription =
+        resultDescription;
+    }
+
+    if (
+      mpesaReceiptNumber !==
+      undefined
+    ) {
+      payment.mpesaReceiptNumber =
+        mpesaReceiptNumber;
+    }
+
+    if (
+      transactionDate !==
+      undefined
+    ) {
+      payment.transactionDate =
+        transactionDate;
+    }
+
+    return payment.save();
+  }
+
+  // ==============================
+  // FIND BY CHECKOUT REQUEST ID
+  // ==============================
+
+  async findByCheckoutRequestId(
+    checkoutRequestId: string,
+  ) {
+    return this.paymentModel
+      .findOne({
+        checkoutRequestId,
+      })
+      .populate('lease')
+      .exec();
+  }
+
+  // ==============================
+  // FIND BY M-PESA RECEIPT
+  // ==============================
+
+  async findByReceiptNumber(
+    receiptNumber: string,
+  ) {
+    return this.paymentModel
+      .findOne({
+        mpesaReceiptNumber:
+          receiptNumber,
+      })
+      .populate('lease')
+      .exec();
   }
 }

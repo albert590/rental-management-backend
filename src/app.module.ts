@@ -14,6 +14,7 @@ import { LeasesModule } from './leases/leases.module';
 import { PaymentsModule } from './payments/payments.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { MpesaModule } from './mpesa/mpesa.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
       }),
     }),
 
+    // Application modules
     UsersModule,
     AuthModule,
     PropertiesModule,
@@ -57,10 +59,17 @@ import { DashboardModule } from './dashboard/dashboard.module';
     PaymentsModule,
     MaintenanceModule,
     DashboardModule,
+
+    // M-PESA integration
+    MpesaModule,
   ],
 
-  controllers: [AppController],
+  controllers: [
+    AppController,
+  ],
 
-  providers: [AppService],
+  providers: [
+    AppService,
+  ],
 })
 export class AppModule {}
