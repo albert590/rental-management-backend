@@ -1,0 +1,14 @@
+[1mdiff --git a/src/auth/jwt.strategy.ts b/src/auth/jwt.strategy.ts[m
+[1mindex 54ab8e9..e3f73e0 100644[m
+[1m--- a/src/auth/jwt.strategy.ts[m
+[1m+++ b/src/auth/jwt.strategy.ts[m
+[36m@@ -29,7 +29,8 @@[m [mexport class JwtStrategy extends PassportStrategy(Strategy) {[m
+     }[m
+ [m
+     return {[m
+[31m-      id: user._id,[m
+[32m+[m[32m      sub: user._id.toString(),[m
+[32m+[m[32m      id: user._id.toString(),[m
+       email: user.email,[m
+       name: user.name,[m
+       role: user.role,[m

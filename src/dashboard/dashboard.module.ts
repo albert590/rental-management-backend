@@ -63,7 +63,13 @@ import {
       },
     ]),
   ],
-  controllers: [DashboardController],
-  providers: [DashboardService],
+
+  controllers: [
+    DashboardController,
+  ],
+
+  providers: [
+    DashboardService,
+  ],
 })
 export class DashboardModule {}
