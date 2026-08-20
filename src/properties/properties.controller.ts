@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 
@@ -23,9 +24,11 @@ export class PropertiesController {
   @Post()
   create(
     @Body() createPropertyDto: CreatePropertyDto,
+    @Req() req: any,
   ) {
     return this.propertiesService.create(
       createPropertyDto,
+      req.user.sub,
     );
   }
 

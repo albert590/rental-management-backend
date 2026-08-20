@@ -19,10 +19,14 @@ export class PropertiesService {
     private readonly propertyModel: Model<PropertyDocument>,
   ) {}
 
-  async create(createPropertyDto: CreatePropertyDto) {
-    const property = await this.propertyModel.create(
-      createPropertyDto,
-    );
+  async create(
+    createPropertyDto: CreatePropertyDto,
+    ownerId: string,
+  ) {
+    const property = await this.propertyModel.create({
+      ...createPropertyDto,
+      owner: ownerId,
+    });
 
     return {
       message: 'Property created successfully',
@@ -38,10 +42,13 @@ export class PropertiesService {
   }
 
   async findOne(id: string) {
-    const property = await this.propertyModel.findById(id);
+    const property =
+      await this.propertyModel.findById(id);
 
     if (!property) {
-      throw new NotFoundException('Property not found');
+      throw new NotFoundException(
+        'Property not found',
+      );
     }
 
     return property;
@@ -51,17 +58,20 @@ export class PropertiesService {
     id: string,
     updateData: Partial<CreatePropertyDto>,
   ) {
-    const property = await this.propertyModel.findByIdAndUpdate(
-      id,
-      updateData,
-      {
-        new: true,
-        runValidators: true,
-      },
-    );
+    const property =
+      await this.propertyModel.findByIdAndUpdate(
+        id,
+        updateData,
+        {
+          new: true,
+          runValidators: true,
+        },
+      );
 
     if (!property) {
-      throw new NotFoundException('Property not found');
+      throw new NotFoundException(
+        'Property not found',
+      );
     }
 
     return {
@@ -75,7 +85,9 @@ export class PropertiesService {
       await this.propertyModel.findByIdAndDelete(id);
 
     if (!property) {
-      throw new NotFoundException('Property not found');
+      throw new NotFoundException(
+        'Property not found',
+      );
     }
 
     return {
