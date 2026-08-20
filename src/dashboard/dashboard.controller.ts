@@ -5,20 +5,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
-import { Request } from 'express';
-
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    _id?: string;
-    id?: string;
-    email: string;
-    name?: string;
-    role?: string;
-  };
-}
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
@@ -27,7 +15,7 @@ export class DashboardController {
     private readonly dashboardService: DashboardService,
   ) {}
 
-  // Admin / Property Manager dashboard
+  // Existing admin/general dashboard
   @Get()
   getStats() {
     return this.dashboardService.getStats();
@@ -35,11 +23,9 @@ export class DashboardController {
 
   // Tenant dashboard
   @Get('tenant')
-  getTenantDashboard(
-    @Req() req: AuthenticatedRequest,
-  ) {
+  getTenantDashboard(@Req() req: any) {
     return this.dashboardService.getTenantDashboard(
-      req.user.email,
+      req.user,
     );
   }
 }
