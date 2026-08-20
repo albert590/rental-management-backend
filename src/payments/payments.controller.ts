@@ -4,11 +4,13 @@ import {
   Get,
   Param,
   Patch,
+  Post,
 } from '@nestjs/common';
 
 import { PaymentsService } from './payments.service';
 
 import {
+  PaymentMethod,
   PaymentStatus,
 } from './schemas/payment.schema';
 
@@ -17,6 +19,34 @@ export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
   ) {}
+
+  // ==============================
+  // CREATE PAYMENT
+  // ==============================
+
+  @Post()
+  async createPayment(
+    @Body()
+    body: {
+      lease: string;
+      amount: number;
+      phoneNumber?: string;
+      accountReference?: string;
+      transactionDesc?: string;
+      merchantRequestId?: string;
+      checkoutRequestId?: string;
+      mpesaReceiptNumber?: string;
+      status?: PaymentStatus;
+      paymentMethod?: PaymentMethod;
+      mode?: string;
+      resultCode?: string;
+      resultDescription?: string;
+      transactionDate?: string;
+      reference?: string;
+    },
+  ) {
+    return this.paymentsService.createPayment(body);
+  }
 
   // ==============================
   // GET ALL PAYMENTS
@@ -46,9 +76,7 @@ export class PaymentsController {
 
   @Get('checkout/:checkoutRequestId')
   async findByCheckoutRequestId(
-    @Param(
-      'checkoutRequestId',
-    )
+    @Param('checkoutRequestId')
     checkoutRequestId: string,
   ) {
     return this.paymentsService.findByCheckoutRequestId(
