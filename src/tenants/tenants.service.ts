@@ -17,9 +17,13 @@ export class TenantsService {
   ) {}
 
   async create(createTenantDto: CreateTenantDto) {
+    const email = createTenantDto.email
+      .toLowerCase()
+      .trim();
+
     const existingTenant = await this.tenantModel.findOne({
       $or: [
-        { email: createTenantDto.email },
+        { email },
         { idNumber: createTenantDto.idNumber },
       ],
     });
@@ -30,7 +34,11 @@ export class TenantsService {
       );
     }
 
-    const tenant = new this.tenantModel(createTenantDto);
+    const tenant = new this.tenantModel({
+      ...createTenantDto,
+      email,
+    });
+
     const savedTenant = await tenant.save();
 
     return {
@@ -47,21 +55,31 @@ export class TenantsService {
   }
 
   async findOne(id: string) {
-    const tenant = await this.tenantModel.findById(id).exec();
+    const tenant = await this.tenantModel
+      .findById(id)
+      .exec();
 
     if (!tenant) {
-      throw new NotFoundException('Tenant not found');
+      throw new NotFoundException(
+        'Tenant not found',
+      );
     }
 
     return tenant;
   }
 
   async findByEmail(email: string) {
-    return this.tenantModel
+    const normalizedEmail = email
+      .toLowerCase()
+      .trim();
+
+    const tenant = await this.tenantModel
       .findOne({
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
       })
       .exec();
+
+    return tenant;
   }
 
   async update(
@@ -73,7 +91,9 @@ export class TenantsService {
 
       if (updateData.email) {
         conditions.push({
-          email: updateData.email,
+          email: updateData.email
+            .toLowerCase()
+            .trim(),
         });
       }
 
@@ -96,10 +116,21 @@ export class TenantsService {
       }
     }
 
+    const updatePayload = {
+      ...updateData,
+      ...(updateData.email
+        ? {
+            email: updateData.email
+              .toLowerCase()
+              .trim(),
+          }
+        : {}),
+    };
+
     const tenant =
       await this.tenantModel.findByIdAndUpdate(
         id,
-        updateData,
+        updatePayload,
         {
           new: true,
           runValidators: true,
@@ -107,7 +138,9 @@ export class TenantsService {
       );
 
     if (!tenant) {
-      throw new NotFoundException('Tenant not found');
+      throw new NotFoundException(
+        'Tenant not found',
+      );
     }
 
     return {
@@ -121,7 +154,9 @@ export class TenantsService {
       await this.tenantModel.findByIdAndDelete(id);
 
     if (!tenant) {
-      throw new NotFoundException('Tenant not found');
+      throw new NotFoundException(
+        'Tenant not found',
+      );
     }
 
     return {
