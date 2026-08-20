@@ -92,9 +92,7 @@ export class PaymentsController {
   async findOne(
     @Param('id') id: string,
   ) {
-    return this.paymentsService.findOne(
-      id,
-    );
+    return this.paymentsService.findOne(id);
   }
 
   // ==============================
@@ -104,7 +102,6 @@ export class PaymentsController {
   @Patch(':id/status')
   async updateStatus(
     @Param('id') id: string,
-
     @Body()
     body: {
       status: PaymentStatus;
