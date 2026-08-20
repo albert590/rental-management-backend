@@ -2,9 +2,12 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+
+import { TenantsService } from '../tenants/tenants.service';
 
 import { CreateLeaseDto } from './dto/create-lease.dto';
 import { Lease, LeaseDocument } from './schemas/lease.schema';
@@ -14,6 +17,8 @@ export class LeasesService {
   constructor(
     @InjectModel(Lease.name)
     private readonly leaseModel: Model<LeaseDocument>,
+
+    private readonly tenantsService: TenantsService,
   ) {}
 
   async create(createLeaseDto: CreateLeaseDto) {
@@ -47,9 +52,35 @@ export class LeasesService {
     };
   }
 
+  // ADMIN: returns all leases
   async findAll() {
     return this.leaseModel
       .find()
+      .populate('tenant', 'name email phone idNumber')
+      .populate(
+        'unit',
+        'unitNumber floor bedrooms monthlyRent status',
+      )
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  // TENANT: returns only the logged-in tenant's leases
+  async findMyLeases(userEmail: string) {
+    const tenant = await this.tenantsService.findByEmail(
+      userEmail,
+    );
+
+    if (!tenant) {
+      throw new NotFoundException(
+        'Tenant profile not found for this account',
+      );
+    }
+
+    return this.leaseModel
+      .find({
+        tenant: tenant._id,
+      })
       .populate('tenant', 'name email phone idNumber')
       .populate(
         'unit',
@@ -133,7 +164,9 @@ export class LeasesService {
     }
 
     if (updateData.tenant) {
-      lease.tenant = new Types.ObjectId(updateData.tenant);
+      lease.tenant = new Types.ObjectId(
+        updateData.tenant,
+      );
     }
 
     if (updateData.startDate) {
@@ -149,7 +182,8 @@ export class LeasesService {
     }
 
     if (updateData.securityDeposit !== undefined) {
-      lease.securityDeposit = updateData.securityDeposit;
+      lease.securityDeposit =
+        updateData.securityDeposit;
     }
 
     if (updateData.status) {
@@ -165,7 +199,8 @@ export class LeasesService {
   }
 
   async remove(id: string) {
-    const lease = await this.leaseModel.findByIdAndDelete(id);
+    const lease =
+      await this.leaseModel.findByIdAndDelete(id);
 
     if (!lease) {
       throw new NotFoundException('Lease not found');

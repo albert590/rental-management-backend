@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
+import { TenantsModule } from '../tenants/tenants.module';
+
 import { LeasesController } from './leases.controller';
 import { LeasesService } from './leases.service';
 import { Lease, LeaseSchema } from './schemas/lease.schema';
@@ -13,6 +15,7 @@ import { Lease, LeaseSchema } from './schemas/lease.schema';
         schema: LeaseSchema,
       },
     ]),
+    TenantsModule,
   ],
   controllers: [LeasesController],
   providers: [LeasesService],

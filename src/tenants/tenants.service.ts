@@ -56,6 +56,14 @@ export class TenantsService {
     return tenant;
   }
 
+  async findByEmail(email: string) {
+    return this.tenantModel
+      .findOne({
+        email: email.toLowerCase().trim(),
+      })
+      .exec();
+  }
+
   async update(
     id: string,
     updateData: Partial<CreateTenantDto>,
@@ -64,17 +72,22 @@ export class TenantsService {
       const conditions: Record<string, string>[] = [];
 
       if (updateData.email) {
-        conditions.push({ email: updateData.email });
+        conditions.push({
+          email: updateData.email,
+        });
       }
 
       if (updateData.idNumber) {
-        conditions.push({ idNumber: updateData.idNumber });
+        conditions.push({
+          idNumber: updateData.idNumber,
+        });
       }
 
-      const existingTenant = await this.tenantModel.findOne({
-        $or: conditions,
-        _id: { $ne: id },
-      });
+      const existingTenant =
+        await this.tenantModel.findOne({
+          $or: conditions,
+          _id: { $ne: id },
+        });
 
       if (existingTenant) {
         throw new ConflictException(
@@ -83,14 +96,15 @@ export class TenantsService {
       }
     }
 
-    const tenant = await this.tenantModel.findByIdAndUpdate(
-      id,
-      updateData,
-      {
-        new: true,
-        runValidators: true,
-      },
-    );
+    const tenant =
+      await this.tenantModel.findByIdAndUpdate(
+        id,
+        updateData,
+        {
+          new: true,
+          runValidators: true,
+        },
+      );
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found');
@@ -103,7 +117,8 @@ export class TenantsService {
   }
 
   async remove(id: string) {
-    const tenant = await this.tenantModel.findByIdAndDelete(id);
+    const tenant =
+      await this.tenantModel.findByIdAndDelete(id);
 
     if (!tenant) {
       throw new NotFoundException('Tenant not found');

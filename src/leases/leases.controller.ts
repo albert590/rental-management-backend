@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 
@@ -29,9 +30,18 @@ export class LeasesController {
     );
   }
 
+  // ADMIN
   @Get()
   findAll() {
     return this.leasesService.findAll();
+  }
+
+  // TENANT
+  @Get('my')
+  findMyLeases(@Req() req: any) {
+    return this.leasesService.findMyLeases(
+      req.user.email,
+    );
   }
 
   @Get('tenant/:tenantId')
