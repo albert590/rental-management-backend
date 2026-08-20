@@ -105,8 +105,13 @@ export class PaymentsService {
         transactionDate:
           data.transactionDate,
 
+        // The schema accepts "mock".
+        // Frontend may send "manual", so
+        // convert it to the supported value.
         mode:
-          data.mode || 'mock',
+          data.mode === 'manual'
+            ? 'mock'
+            : data.mode || 'mock',
       });
 
     return payment.save();
