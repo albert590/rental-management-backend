@@ -41,7 +41,10 @@ export class UsersService {
       name: createUserDto.name,
       email,
       password: hashedPassword,
-      role: createUserDto.role || 'user',
+
+      // Public registration creates a tenant by default.
+      // An explicitly supplied role is still preserved.
+      role: createUserDto.role || 'tenant',
     });
 
     const savedUser = await user.save();

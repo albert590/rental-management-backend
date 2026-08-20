@@ -19,7 +19,7 @@ export class User {
   @Prop({ required: true })
   password!: string;
 
-  @Prop({ default: 'user' })
+  @Prop({ default: 'tenant' })
   role!: string;
 
   @Prop({
