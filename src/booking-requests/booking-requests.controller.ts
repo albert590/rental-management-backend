@@ -11,9 +11,7 @@ import {
 } from '@nestjs/common';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-
 import { BookingRequestsService } from './booking-requests.service';
-
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 
 @Controller('booking-requests')
@@ -26,8 +24,7 @@ export class BookingRequestsController {
   @Post()
   create(
     @Req() req: any,
-    @Body()
-    dto: CreateBookingRequestDto,
+    @Body() dto: CreateBookingRequestDto,
   ) {
     return this.bookingRequestsService.create(
       req.user.sub,
@@ -65,6 +62,17 @@ export class BookingRequestsController {
     return this.bookingRequestsService.updateStatus(
       id,
       'rejected',
+    );
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: CreateBookingRequestDto,
+  ) {
+    return this.bookingRequestsService.update(
+      id,
+      dto,
     );
   }
 

@@ -38,18 +38,19 @@ export class BookingRequestsService {
     }
 
     /*
-     * The JWT contains the User ID.
-     * Booking requests and leases must use
-     * the actual Tenant document ID.
+     * Convert User ID -> Tenant ID.
      */
-    const user = await this.bookingRequestModel.db
-      .collection('users')
-      .findOne({
-        _id: new Types.ObjectId(userId),
-      });
+    const user =
+      await this.bookingRequestModel.db
+        .collection('users')
+        .findOne({
+          _id: new Types.ObjectId(userId),
+        });
 
     if (!user) {
-      throw new NotFoundException('User account not found');
+      throw new NotFoundException(
+        'User account not found',
+      );
     }
 
     const userEmail = user.email;
@@ -98,7 +99,9 @@ export class BookingRequestsService {
         });
 
     if (!unit) {
-      throw new NotFoundException('Unit not found');
+      throw new NotFoundException(
+        'Unit not found',
+      );
     }
 
     /*
@@ -132,8 +135,7 @@ export class BookingRequestsService {
     }
 
     /*
-     * Create booking request using the
-     * actual Tenant ID.
+     * Create booking request.
      */
     const request =
       await this.bookingRequestModel.create({
@@ -162,7 +164,9 @@ export class BookingRequestsService {
 
   async findMine(userId: string) {
     if (!Types.ObjectId.isValid(userId)) {
-      throw new BadRequestException('Invalid user ID');
+      throw new BadRequestException(
+        'Invalid user ID',
+      );
     }
 
     /*
@@ -224,6 +228,9 @@ export class BookingRequestsService {
     return request;
   }
 
+  /*
+   * APPROVE / REJECT BOOKING REQUEST
+   */
   async updateStatus(
     id: string,
     status: 'approved' | 'rejected',
@@ -244,7 +251,7 @@ export class BookingRequestsService {
     }
 
     /*
-     * Prevent approving an already-approved request.
+     * Prevent approving an already approved request.
      */
     if (
       status === 'approved' &&
@@ -272,7 +279,7 @@ export class BookingRequestsService {
     const unitId = request.unit;
 
     /*
-     * Make sure the tenant exists.
+     * Make sure tenant exists.
      */
     const tenant =
       await this.bookingRequestModel.db
@@ -350,8 +357,7 @@ export class BookingRequestsService {
     );
 
     /*
-     * Create lease using the REAL
-     * Tenant ID.
+     * Create lease.
      */
     const leaseResult =
       await this.bookingRequestModel.db
@@ -411,6 +417,118 @@ export class BookingRequestsService {
     };
   }
 
+  /*
+   * EDIT BOOKING REQUEST
+   */
+  async update(
+    id: string,
+    dto: CreateBookingRequestDto,
+  ) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(
+        'Invalid booking request ID',
+      );
+    }
+
+    const request =
+      await this.bookingRequestModel.findById(id);
+
+    if (!request) {
+      throw new NotFoundException(
+        'Booking request not found',
+      );
+    }
+
+    /*
+     * Update message.
+     */
+    if (dto.message !== undefined) {
+      request.message = dto.message;
+    }
+
+    /*
+     * Update requested unit.
+     */
+    if (
+      dto.unitId &&
+      dto.unitId !== request.unit.toString()
+    ) {
+      if (
+        !Types.ObjectId.isValid(dto.unitId)
+      ) {
+        throw new BadRequestException(
+          'Invalid unit ID',
+        );
+      }
+
+      const newUnit =
+        await this.bookingRequestModel.db
+          .collection('units')
+          .findOne({
+            _id: new Types.ObjectId(dto.unitId),
+          });
+
+      if (!newUnit) {
+        throw new NotFoundException(
+          'Unit not found',
+        );
+      }
+
+      /*
+       * Check availability.
+       */
+      const unitStatus =
+        String(
+          newUnit.status || 'available',
+        ).toLowerCase();
+
+      if (
+        unitStatus === 'occupied' ||
+        unitStatus === 'rented' ||
+        unitStatus === 'maintenance' ||
+        unitStatus ===
+          'under_maintenance'
+      ) {
+        throw new ConflictException(
+          'This unit is not available for booking',
+        );
+      }
+
+      /*
+       * Get property.
+       */
+      const propertyId =
+        newUnit.property ||
+        newUnit.propertyId;
+
+      if (!propertyId) {
+        throw new BadRequestException(
+          'This unit is not linked to a property',
+        );
+      }
+
+      /*
+       * Update unit.
+       */
+      request.unit =
+        new Types.ObjectId(dto.unitId);
+
+      /*
+       * Update property automatically
+       * based on the selected unit.
+       */
+      request.property =
+        new Types.ObjectId(propertyId);
+    }
+
+    await request.save();
+
+    return this.findOne(id);
+  }
+
+  /*
+   * DELETE BOOKING REQUEST
+   */
   async remove(id: string) {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException(
