@@ -9,12 +9,21 @@ import {
   BookingRequestSchema,
 } from './schemas/booking-request.schema';
 
+import {
+  Lease,
+  LeaseSchema,
+} from '../leases/schemas/lease.schema';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
       {
         name: BookingRequest.name,
         schema: BookingRequestSchema,
+      },
+      {
+        name: Lease.name,
+        schema: LeaseSchema,
       },
     ]),
   ],
