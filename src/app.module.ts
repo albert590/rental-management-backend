@@ -16,6 +16,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { MpesaModule } from './mpesa/mpesa.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { BookingRequestsModule } from './booking-requests/booking-requests.module';
 
 @Module({
   imports: [
@@ -66,6 +67,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 
     // Notifications
     NotificationsModule,
+
+    BookingRequestsModule,
   ],
 
   controllers: [
