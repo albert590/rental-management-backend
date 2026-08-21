@@ -20,10 +20,7 @@ export class PaymentsController {
     private readonly paymentsService: PaymentsService,
   ) {}
 
-  // ==============================
   // CREATE PAYMENT
-  // ==============================
-
   @Post()
   async createPayment(
     @Body()
@@ -48,32 +45,21 @@ export class PaymentsController {
     return this.paymentsService.createPayment(body);
   }
 
-  // ==============================
   // GET ALL PAYMENTS
-  // ==============================
-
   @Get()
   async findAll() {
     return this.paymentsService.findAll();
   }
 
-  // ==============================
   // GET PAYMENTS BY LEASE
-  // ==============================
-
   @Get('lease/:leaseId')
   async findByLease(
     @Param('leaseId') leaseId: string,
   ) {
-    return this.paymentsService.findByLease(
-      leaseId,
-    );
+    return this.paymentsService.findByLease(leaseId);
   }
 
-  // ==============================
   // GET PAYMENT BY CHECKOUT ID
-  // ==============================
-
   @Get('checkout/:checkoutRequestId')
   async findByCheckoutRequestId(
     @Param('checkoutRequestId')
@@ -84,10 +70,7 @@ export class PaymentsController {
     );
   }
 
-  // ==============================
   // GET PAYMENT BY ID
-  // ==============================
-
   @Get(':id')
   async findOne(
     @Param('id') id: string,
@@ -95,10 +78,30 @@ export class PaymentsController {
     return this.paymentsService.findOne(id);
   }
 
-  // ==============================
-  // UPDATE PAYMENT STATUS
-  // ==============================
+  // ADMIN APPROVE PAYMENT
+  @Patch(':id/approve')
+  async approvePayment(
+    @Param('id') id: string,
+  ) {
+    return this.paymentsService.approvePayment(id);
+  }
 
+  // ADMIN REJECT PAYMENT
+  @Patch(':id/reject')
+  async rejectPayment(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      reason?: string;
+    },
+  ) {
+    return this.paymentsService.rejectPayment(
+      id,
+      body.reason,
+    );
+  }
+
+  // UPDATE PAYMENT STATUS
   @Patch(':id/status')
   async updateStatus(
     @Param('id') id: string,
