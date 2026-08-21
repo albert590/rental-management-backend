@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -146,73 +147,166 @@ export class BookingRequestsService {
     }
 
     /*
-     * If the request is approved,
-     * mark the requested unit as occupied.
+     * Prevent approving the same request twice.
      */
-    if (status === 'approved') {
-      const unitId = request.unit;
-
-      if (!unitId) {
-        throw new BadRequestException(
-          'Booking request has no unit assigned',
-        );
-      }
-
-      const unit = await this.bookingRequestModel.db
-        .collection('units')
-        .findOne({
-          _id: new Types.ObjectId(unitId),
-        });
-
-      if (!unit) {
-        throw new NotFoundException(
-          'Requested unit not found',
-        );
-      }
-
-      /*
-       * Prevent approving a unit that is already occupied.
-       */
-      const currentStatus = String(
-        unit.status || '',
-      )
-        .toLowerCase()
-        .trim();
-
-      if (
-        currentStatus === 'occupied' ||
-        currentStatus === 'rented'
-      ) {
-        throw new BadRequestException(
-          'This unit is already occupied',
-        );
-      }
-
-      /*
-       * Update the real unit document in MongoDB.
-       */
-      await this.bookingRequestModel.db
-        .collection('units')
-        .updateOne(
-          {
-            _id: new Types.ObjectId(unitId),
-          },
-          {
-            $set: {
-              status: 'occupied',
-            },
-          },
-        );
+    if (
+      status === 'approved' &&
+      request.status === 'approved'
+    ) {
+      return this.findOne(id);
     }
 
     /*
-     * Update the booking request status.
+     * REJECT REQUEST
+     *
+     * No lease should be created.
      */
-    request.status = status;
+    if (status === 'rejected') {
+      request.status = 'rejected';
+
+      await request.save();
+
+      return this.findOne(id);
+    }
+
+    /*
+     * APPROVE REQUEST
+     *
+     * Create an active lease for the tenant.
+     */
+
+    const tenantId = request.tenant;
+    const unitId = request.unit;
+
+    /*
+     * Check whether this unit already has
+     * an active lease.
+     */
+    const existingLease =
+      await this.bookingRequestModel.db
+        .collection('leases')
+        .findOne({
+          unit: unitId,
+          status: 'active',
+        });
+
+    if (existingLease) {
+      throw new ConflictException(
+        'This unit already has an active lease',
+      );
+    }
+
+    /*
+     * Get the unit from MongoDB.
+     */
+    const unit =
+      await this.bookingRequestModel.db
+        .collection('units')
+        .findOne({
+          _id: unitId,
+        });
+
+    if (!unit) {
+      throw new NotFoundException(
+        'Unit not found',
+      );
+    }
+
+    /*
+     * Get monthly rent from the unit.
+     */
+    const monthlyRent = Number(
+      unit.monthlyRent ??
+        unit.rent ??
+        0,
+    );
+
+    /*
+     * Default security deposit to the
+     * monthly rent.
+     *
+     * This can later be changed from
+     * the lease management screen.
+     */
+    const securityDeposit = monthlyRent;
+
+    /*
+     * Lease starts today.
+     */
+    const startDate = new Date();
+
+    /*
+     * Default lease period = 1 year.
+     */
+    const endDate = new Date(startDate);
+
+    endDate.setFullYear(
+      endDate.getFullYear() + 1,
+    );
+
+    /*
+     * Create the lease.
+     */
+    const leaseResult =
+      await this.bookingRequestModel.db
+        .collection('leases')
+        .insertOne({
+          tenant: tenantId,
+          unit: unitId,
+
+          startDate,
+          endDate,
+
+          monthlyRent,
+          securityDeposit,
+
+          status: 'active',
+
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+    /*
+     * Mark the unit as occupied.
+     */
+    await this.bookingRequestModel.db
+      .collection('units')
+      .updateOne(
+        {
+          _id: unitId,
+        },
+        {
+          $set: {
+            status: 'occupied',
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+    /*
+     * Mark booking request as approved.
+     */
+    request.status = 'approved';
 
     await request.save();
 
-    return this.findOne(id);
+    /*
+     * Return both the approved request
+     * and the newly-created lease.
+     */
+    const approvedRequest =
+      await this.findOne(id);
+
+    return {
+      message:
+        'Booking request approved and lease created successfully',
+
+      bookingRequest:
+        approvedRequest,
+
+      leaseId:
+        leaseResult.insertedId,
+    };
   }
 
   async remove(id: string) {
@@ -223,9 +317,8 @@ export class BookingRequestsService {
     }
 
     const request =
-      await this.bookingRequestModel.findByIdAndDelete(
-        id,
-      );
+      await this.bookingRequestModel
+        .findByIdAndDelete(id);
 
     if (!request) {
       throw new NotFoundException(
@@ -235,7 +328,8 @@ export class BookingRequestsService {
 
     return {
       success: true,
-      message: 'Booking request deleted successfully',
+      message:
+        'Booking request deleted successfully',
     };
   }
 }
