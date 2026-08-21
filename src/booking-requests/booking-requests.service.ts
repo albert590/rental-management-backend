@@ -145,6 +145,69 @@ export class BookingRequestsService {
       );
     }
 
+    /*
+     * If the request is approved,
+     * mark the requested unit as occupied.
+     */
+    if (status === 'approved') {
+      const unitId = request.unit;
+
+      if (!unitId) {
+        throw new BadRequestException(
+          'Booking request has no unit assigned',
+        );
+      }
+
+      const unit = await this.bookingRequestModel.db
+        .collection('units')
+        .findOne({
+          _id: new Types.ObjectId(unitId),
+        });
+
+      if (!unit) {
+        throw new NotFoundException(
+          'Requested unit not found',
+        );
+      }
+
+      /*
+       * Prevent approving a unit that is already occupied.
+       */
+      const currentStatus = String(
+        unit.status || '',
+      )
+        .toLowerCase()
+        .trim();
+
+      if (
+        currentStatus === 'occupied' ||
+        currentStatus === 'rented'
+      ) {
+        throw new BadRequestException(
+          'This unit is already occupied',
+        );
+      }
+
+      /*
+       * Update the real unit document in MongoDB.
+       */
+      await this.bookingRequestModel.db
+        .collection('units')
+        .updateOne(
+          {
+            _id: new Types.ObjectId(unitId),
+          },
+          {
+            $set: {
+              status: 'occupied',
+            },
+          },
+        );
+    }
+
+    /*
+     * Update the booking request status.
+     */
     request.status = status;
 
     await request.save();
