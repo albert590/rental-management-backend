@@ -15,6 +15,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { MpesaModule } from './mpesa/mpesa.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -62,6 +63,9 @@ import { MpesaModule } from './mpesa/mpesa.module';
 
     // M-PESA integration
     MpesaModule,
+
+    // Notifications
+    NotificationsModule,
   ],
 
   controllers: [
