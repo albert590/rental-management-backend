@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -46,13 +47,13 @@ export class PaymentsService {
     reference?: string;
   }) {
     if (!Types.ObjectId.isValid(data.lease)) {
-      throw new NotFoundException(
+      throw new BadRequestException(
         'Invalid lease ID',
       );
     }
 
     if (!data.amount || data.amount <= 0) {
-      throw new NotFoundException(
+      throw new BadRequestException(
         'Payment amount must be greater than zero',
       );
     }
@@ -74,6 +75,8 @@ export class PaymentsService {
         reference:
           data.reference,
 
+        // Tenant payment starts as PENDING.
+        // Admin must approve it.
         status:
           data.status ||
           PaymentStatus.PENDING,
@@ -105,9 +108,6 @@ export class PaymentsService {
         transactionDate:
           data.transactionDate,
 
-        // The schema accepts "mock".
-        // Frontend may send "manual", so
-        // convert it to the supported value.
         mode:
           data.mode === 'manual'
             ? 'mock'
@@ -252,6 +252,105 @@ export class PaymentsService {
       payment.transactionDate =
         transactionDate;
     }
+
+    return payment.save();
+  }
+
+  // ==============================
+  // ADMIN APPROVE PAYMENT
+  // ==============================
+
+  async approvePayment(
+    id: string,
+  ) {
+    if (
+      !Types.ObjectId.isValid(id)
+    ) {
+      throw new BadRequestException(
+        'Invalid payment ID',
+      );
+    }
+
+    const payment =
+      await this.paymentModel.findById(
+        id,
+      );
+
+    if (!payment) {
+      throw new NotFoundException(
+        'Payment not found',
+      );
+    }
+
+    if (
+      payment.status ===
+      PaymentStatus.COMPLETED
+    ) {
+      return payment;
+    }
+
+    if (
+      payment.status !==
+      PaymentStatus.PENDING
+    ) {
+      throw new BadRequestException(
+        `Payment cannot be approved because its status is ${payment.status}`,
+      );
+    }
+
+    payment.status =
+      PaymentStatus.COMPLETED;
+
+    payment.resultCode = '0';
+
+    payment.resultDescription =
+      'Payment approved by administrator';
+
+    return payment.save();
+  }
+
+  // ==============================
+  // ADMIN REJECT PAYMENT
+  // ==============================
+
+  async rejectPayment(
+    id: string,
+    reason?: string,
+  ) {
+    if (
+      !Types.ObjectId.isValid(id)
+    ) {
+      throw new BadRequestException(
+        'Invalid payment ID',
+      );
+    }
+
+    const payment =
+      await this.paymentModel.findById(
+        id,
+      );
+
+    if (!payment) {
+      throw new NotFoundException(
+        'Payment not found',
+      );
+    }
+
+    if (
+      payment.status ===
+      PaymentStatus.COMPLETED
+    ) {
+      throw new BadRequestException(
+        'A completed payment cannot be rejected',
+      );
+    }
+
+    payment.status =
+      PaymentStatus.FAILED;
+
+    payment.resultDescription =
+      reason ||
+      'Payment rejected by administrator';
 
     return payment.save();
   }
