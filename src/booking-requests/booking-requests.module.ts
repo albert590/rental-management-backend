@@ -9,10 +9,7 @@ import {
   BookingRequestSchema,
 } from './schemas/booking-request.schema';
 
-import {
-  Lease,
-  LeaseSchema,
-} from '../leases/schemas/lease.schema';
+import { TenantsModule } from '../tenants/tenants.module';
 
 @Module({
   imports: [
@@ -21,11 +18,9 @@ import {
         name: BookingRequest.name,
         schema: BookingRequestSchema,
       },
-      {
-        name: Lease.name,
-        schema: LeaseSchema,
-      },
     ]),
+
+    TenantsModule,
   ],
 
   controllers: [
