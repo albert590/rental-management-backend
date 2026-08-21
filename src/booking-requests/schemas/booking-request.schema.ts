@@ -8,7 +8,7 @@ export type BookingRequestDocument =
 export class BookingRequest {
   @Prop({
     type: Types.ObjectId,
-    ref: 'User',
+    ref: 'Tenant',
     required: true,
   })
   tenant!: Types.ObjectId;
