@@ -25,27 +25,25 @@ export class BookingRequestsService {
     private readonly tenantsService: TenantsService,
   ) {}
 
-  async create(
+  /*
+   * Convert authenticated User ID -> real Tenant ID.
+   *
+   * IMPORTANT:
+   * BookingRequest.tenant must ALWAYS contain
+   * the Tenant document ID, NOT the User document ID.
+   */
+  private async getTenantIdFromUserId(
     userId: string,
-    dto: CreateBookingRequestDto,
-  ) {
+  ): Promise<Types.ObjectId> {
     if (!Types.ObjectId.isValid(userId)) {
       throw new BadRequestException('Invalid user ID');
     }
 
-    if (!Types.ObjectId.isValid(dto.unitId)) {
-      throw new BadRequestException('Invalid unit ID');
-    }
-
-    /*
-     * Convert User ID -> Tenant ID.
-     */
-    const user =
-      await this.bookingRequestModel.db
-        .collection('users')
-        .findOne({
-          _id: new Types.ObjectId(userId),
-        });
+    const user = await this.bookingRequestModel.db
+      .collection('users')
+      .findOne({
+        _id: new Types.ObjectId(userId),
+      });
 
     if (!user) {
       throw new NotFoundException(
@@ -53,16 +51,18 @@ export class BookingRequestsService {
       );
     }
 
-    const userEmail = user.email;
+    const email = String(user.email || '')
+      .toLowerCase()
+      .trim();
 
-    if (!userEmail) {
+    if (!email) {
       throw new BadRequestException(
         'User account does not have an email address',
       );
     }
 
     const tenant =
-      await this.tenantsService.findByEmail(userEmail);
+      await this.tenantsService.findByEmail(email);
 
     if (!tenant) {
       throw new NotFoundException(
@@ -70,10 +70,115 @@ export class BookingRequestsService {
       );
     }
 
-    const tenantId = tenant._id;
+    /*
+     * Always return the REAL Tenant _id.
+     */
+    return new Types.ObjectId(tenant._id);
+  }
+
+  /*
+   * Get a unit by ID.
+   */
+  private async getUnit(unitId: string) {
+    if (!Types.ObjectId.isValid(unitId)) {
+      throw new BadRequestException(
+        'Invalid unit ID',
+      );
+    }
+
+    const unit =
+      await this.bookingRequestModel.db
+        .collection('units')
+        .findOne({
+          _id: new Types.ObjectId(unitId),
+        });
+
+    if (!unit) {
+      throw new NotFoundException(
+        'Unit not found',
+      );
+    }
+
+    return unit;
+  }
+
+  /*
+   * Make sure a unit can be booked.
+   */
+  private checkUnitAvailability(unit: any) {
+    const status = String(
+      unit.status || 'available',
+    ).toLowerCase();
+
+    const unavailableStatuses = [
+      'occupied',
+      'rented',
+      'maintenance',
+      'under_maintenance',
+    ];
+
+    if (unavailableStatuses.includes(status)) {
+      throw new ConflictException(
+        'This unit is not available for booking',
+      );
+    }
+  }
+
+  /*
+   * Get property ID from a unit.
+   */
+  private getPropertyId(unit: any): Types.ObjectId {
+    const propertyId =
+      unit.property || unit.propertyId;
+
+    if (!propertyId) {
+      throw new BadRequestException(
+        'This unit is not linked to a property',
+      );
+    }
+
+    if (!Types.ObjectId.isValid(propertyId)) {
+      throw new BadRequestException(
+        'Invalid property ID',
+      );
+    }
+
+    return new Types.ObjectId(propertyId);
+  }
+
+  /*
+   * CREATE BOOKING REQUEST
+   */
+  async create(
+    userId: string,
+    dto: CreateBookingRequestDto,
+  ) {
+    /*
+     * Convert authenticated User ID to
+     * the correct Tenant ID.
+     */
+    const tenantId =
+      await this.getTenantIdFromUserId(userId);
 
     /*
-     * Prevent duplicate pending requests.
+     * Validate and get unit.
+     */
+    const unit = await this.getUnit(dto.unitId);
+
+    /*
+     * Make sure unit is available.
+     */
+    this.checkUnitAvailability(unit);
+
+    /*
+     * Get property from unit.
+     */
+    const propertyId =
+      this.getPropertyId(unit);
+
+    /*
+     * Prevent duplicate pending requests
+     * for the same tenant and unit.
      */
     const existing =
       await this.bookingRequestModel.findOne({
@@ -89,60 +194,20 @@ export class BookingRequestsService {
     }
 
     /*
-     * Get unit.
-     */
-    const unit =
-      await this.bookingRequestModel.db
-        .collection('units')
-        .findOne({
-          _id: new Types.ObjectId(dto.unitId),
-        });
-
-    if (!unit) {
-      throw new NotFoundException(
-        'Unit not found',
-      );
-    }
-
-    /*
-     * Make sure the unit is available.
-     */
-    const unitStatus =
-      String(unit.status || 'available').toLowerCase();
-
-    if (
-      unitStatus === 'occupied' ||
-      unitStatus === 'rented' ||
-      unitStatus === 'maintenance' ||
-      unitStatus === 'under_maintenance'
-    ) {
-      throw new ConflictException(
-        'This unit is not available for booking',
-      );
-    }
-
-    /*
-     * Get property.
-     */
-    const propertyId =
-      unit.property ||
-      unit.propertyId;
-
-    if (!propertyId) {
-      throw new BadRequestException(
-        'This unit is not linked to a property',
-      );
-    }
-
-    /*
-     * Create booking request.
+     * IMPORTANT:
+     *
+     * tenant = Tenant ID
+     * unit = Unit ID
+     * property = Property ID
+     *
+     * Never store userId in tenant.
      */
     const request =
       await this.bookingRequestModel.create({
         tenant: tenantId,
         unit: new Types.ObjectId(dto.unitId),
-        property: new Types.ObjectId(propertyId),
-        message: dto.message || '',
+        property: propertyId,
+        message: dto.message?.trim() || '',
         status: 'pending',
       });
 
@@ -153,58 +218,40 @@ export class BookingRequestsService {
       .populate('property');
   }
 
+  /*
+   * GET ALL BOOKING REQUESTS
+   */
   async findAll() {
     return this.bookingRequestModel
       .find()
       .populate('tenant')
       .populate('unit')
       .populate('property')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .exec();
   }
 
+  /*
+   * GET CURRENT TENANT'S BOOKING REQUESTS
+   */
   async findMine(userId: string) {
-    if (!Types.ObjectId.isValid(userId)) {
-      throw new BadRequestException(
-        'Invalid user ID',
-      );
-    }
-
-    /*
-     * Convert User ID -> Tenant ID.
-     */
-    const user =
-      await this.bookingRequestModel.db
-        .collection('users')
-        .findOne({
-          _id: new Types.ObjectId(userId),
-        });
-
-    if (!user?.email) {
-      throw new NotFoundException(
-        'User account not found',
-      );
-    }
-
-    const tenant =
-      await this.tenantsService.findByEmail(
-        user.email,
-      );
-
-    if (!tenant) {
-      throw new NotFoundException(
-        'Tenant profile not found for this account',
-      );
-    }
+    const tenantId =
+      await this.getTenantIdFromUserId(userId);
 
     return this.bookingRequestModel
       .find({
-        tenant: tenant._id,
+        tenant: tenantId,
       })
+      .populate('tenant')
       .populate('unit')
       .populate('property')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .exec();
   }
 
+  /*
+   * GET ONE BOOKING REQUEST
+   */
   async findOne(id: string) {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException(
@@ -217,7 +264,8 @@ export class BookingRequestsService {
         .findById(id)
         .populate('tenant')
         .populate('unit')
-        .populate('property');
+        .populate('property')
+        .exec();
 
     if (!request) {
       throw new NotFoundException(
@@ -251,7 +299,7 @@ export class BookingRequestsService {
     }
 
     /*
-     * Prevent approving an already approved request.
+     * Already approved.
      */
     if (
       status === 'approved' &&
@@ -274,12 +322,11 @@ export class BookingRequestsService {
     /*
      * Approve request.
      */
-
     const tenantId = request.tenant;
     const unitId = request.unit;
 
     /*
-     * Make sure tenant exists.
+     * Verify tenant exists.
      */
     const tenant =
       await this.bookingRequestModel.db
@@ -295,7 +342,8 @@ export class BookingRequestsService {
     }
 
     /*
-     * Check existing active lease.
+     * Check if the unit already has an
+     * active lease.
      */
     const existingLease =
       await this.bookingRequestModel.db
@@ -328,6 +376,11 @@ export class BookingRequestsService {
     }
 
     /*
+     * Make sure unit is still available.
+     */
+    this.checkUnitAvailability(unit);
+
+    /*
      * Get monthly rent.
      */
     const monthlyRent = Number(
@@ -337,8 +390,8 @@ export class BookingRequestsService {
     );
 
     /*
-     * Security deposit defaults to
-     * one month's rent.
+     * Security deposit defaults to one
+     * month's rent.
      */
     const securityDeposit = monthlyRent;
 
@@ -396,7 +449,7 @@ export class BookingRequestsService {
       );
 
     /*
-     * Mark request approved.
+     * Mark booking request approved.
      */
     request.status = 'approved';
 
@@ -443,7 +496,8 @@ export class BookingRequestsService {
      * Update message.
      */
     if (dto.message !== undefined) {
-      request.message = dto.message;
+      request.message =
+        dto.message.trim();
     }
 
     /*
@@ -453,59 +507,13 @@ export class BookingRequestsService {
       dto.unitId &&
       dto.unitId !== request.unit.toString()
     ) {
-      if (
-        !Types.ObjectId.isValid(dto.unitId)
-      ) {
-        throw new BadRequestException(
-          'Invalid unit ID',
-        );
-      }
-
       const newUnit =
-        await this.bookingRequestModel.db
-          .collection('units')
-          .findOne({
-            _id: new Types.ObjectId(dto.unitId),
-          });
+        await this.getUnit(dto.unitId);
 
-      if (!newUnit) {
-        throw new NotFoundException(
-          'Unit not found',
-        );
-      }
+      this.checkUnitAvailability(newUnit);
 
-      /*
-       * Check availability.
-       */
-      const unitStatus =
-        String(
-          newUnit.status || 'available',
-        ).toLowerCase();
-
-      if (
-        unitStatus === 'occupied' ||
-        unitStatus === 'rented' ||
-        unitStatus === 'maintenance' ||
-        unitStatus ===
-          'under_maintenance'
-      ) {
-        throw new ConflictException(
-          'This unit is not available for booking',
-        );
-      }
-
-      /*
-       * Get property.
-       */
       const propertyId =
-        newUnit.property ||
-        newUnit.propertyId;
-
-      if (!propertyId) {
-        throw new BadRequestException(
-          'This unit is not linked to a property',
-        );
-      }
+        this.getPropertyId(newUnit);
 
       /*
        * Update unit.
@@ -514,11 +522,9 @@ export class BookingRequestsService {
         new Types.ObjectId(dto.unitId);
 
       /*
-       * Update property automatically
-       * based on the selected unit.
+       * Automatically update property.
        */
-      request.property =
-        new Types.ObjectId(propertyId);
+      request.property = propertyId;
     }
 
     await request.save();
