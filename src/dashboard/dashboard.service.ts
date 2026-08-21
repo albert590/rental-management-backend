@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 
 import {
   Property,
@@ -133,12 +133,9 @@ export class DashboardService {
 
   async getTenantDashboard(user: any) {
     /*
-     * The tenant dashboard MUST use the currently
-     * authenticated user's email.
-     *
-     * We do NOT select an arbitrary tenant.
+     * Use ONLY the currently authenticated
+     * user's email.
      */
-
     const authenticatedEmail =
       typeof user?.email === 'string'
         ? user.email.toLowerCase().trim()
@@ -151,8 +148,7 @@ export class DashboardService {
     }
 
     /*
-     * Find ONLY the tenant whose email matches
-     * the authenticated account.
+     * Find ONLY this tenant.
      */
     const tenant = await this.tenantModel
       .findOne({
@@ -162,11 +158,7 @@ export class DashboardService {
       .lean();
 
     /*
-     * It is valid for a newly registered user to
-     * have a User account but no Tenant record yet.
-     *
-     * Return an empty tenant dashboard instead
-     * of returning another person's data.
+     * User exists but has no tenant profile.
      */
     if (!tenant) {
       return {
@@ -190,7 +182,7 @@ export class DashboardService {
     }
 
     /*
-     * Find leases belonging ONLY to this tenant.
+     * Find ONLY leases belonging to this tenant.
      */
     const leases = await this.leaseModel
       .find({
@@ -202,7 +194,7 @@ export class DashboardService {
       .lean();
 
     /*
-     * No lease for this tenant.
+     * Tenant has no lease.
      */
     if (!leases.length) {
       return {
@@ -226,9 +218,8 @@ export class DashboardService {
     }
 
     /*
-     * Prefer the active lease.
-     * If there is no active lease, use the
-     * most recent lease.
+     * Prefer active lease.
+     * Otherwise use most recent lease.
      */
     const activeLease =
       leases.find(
@@ -237,33 +228,69 @@ export class DashboardService {
       ) ?? leases[0];
 
     /*
-     * Find ONLY the unit belonging to the selected
-     * tenant lease.
+     * Find the unit belonging to this lease.
      */
-    let unit = null;
+    let unit: any = null;
 
     if (activeLease.unit) {
       unit = await this.unitModel
         .findById(activeLease.unit)
+        .select('-__v')
         .lean();
     }
 
     /*
-     * Find ONLY the property belonging to that unit.
+     * Find the property belonging to this unit.
      */
-    let property = null;
+    let property: any = null;
 
     if (unit?.property) {
       property = await this.propertyModel
         .findById(unit.property)
+        .select('-__v')
         .lean();
     }
 
     /*
-     * Find payments ONLY for this tenant's leases.
+     * IMPORTANT:
      *
-     * This is important:
-     * We do NOT fetch all payments.
+     * The frontend expects:
+     *
+     * lease.unit.unitNumber
+     * lease.property.name
+     *
+     * Therefore create a dashboard lease object
+     * containing the actual unit and property.
+     */
+    const dashboardLease = {
+      ...activeLease,
+
+      unit: unit
+        ? {
+            _id: unit._id,
+            unitNumber: unit.unitNumber,
+            floor: unit.floor,
+            bedrooms: unit.bedrooms,
+            monthlyRent:
+              unit.monthlyRent,
+            status: unit.status,
+            property: unit.property,
+          }
+        : null,
+
+      property: property
+        ? {
+            _id: property._id,
+            name: property.name,
+            address: property.address,
+            city: property.city,
+            type: property.type,
+          }
+        : null,
+    };
+
+    /*
+     * Find payments ONLY for this tenant's leases.
      */
     const leaseIds = leases.map(
       (item: any) => item._id,
@@ -282,8 +309,7 @@ export class DashboardService {
       .lean();
 
     /*
-     * Calculate total paid ONLY from this tenant's
-     * payments.
+     * Calculate total completed payments.
      */
     const totalPaid = payments
       .filter(
@@ -302,7 +328,7 @@ export class DashboardService {
       );
 
     /*
-     * Count active leases for THIS tenant.
+     * Count active leases for this tenant.
      */
     const activeLeases =
       leases.filter(
@@ -312,13 +338,21 @@ export class DashboardService {
       ).length;
 
     /*
-     * Return ONLY this tenant's information.
+     * Return tenant dashboard data.
      */
     return {
       tenant,
 
-      lease: activeLease,
+      /*
+       * Use dashboardLease here instead of
+       * the original activeLease.
+       */
+      lease: dashboardLease,
 
+      /*
+       * Keep these fields as well because
+       * other frontend pages may use them.
+       */
       unit,
 
       property,
