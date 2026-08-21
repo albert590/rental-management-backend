@@ -14,11 +14,15 @@ import {
 
 import { CreateBookingRequestDto } from './dto/create-booking-request.dto';
 
+import { TenantsService } from '../tenants/tenants.service';
+
 @Injectable()
 export class BookingRequestsService {
   constructor(
     @InjectModel(BookingRequest.name)
     private readonly bookingRequestModel: Model<BookingRequestDocument>,
+
+    private readonly tenantsService: TenantsService,
   ) {}
 
   async create(
@@ -33,11 +37,49 @@ export class BookingRequestsService {
       throw new BadRequestException('Invalid unit ID');
     }
 
-    const existing = await this.bookingRequestModel.findOne({
-      tenant: new Types.ObjectId(userId),
-      unit: new Types.ObjectId(dto.unitId),
-      status: 'pending',
-    });
+    /*
+     * The JWT contains the User ID.
+     * Booking requests and leases must use
+     * the actual Tenant document ID.
+     */
+    const user = await this.bookingRequestModel.db
+      .collection('users')
+      .findOne({
+        _id: new Types.ObjectId(userId),
+      });
+
+    if (!user) {
+      throw new NotFoundException('User account not found');
+    }
+
+    const userEmail = user.email;
+
+    if (!userEmail) {
+      throw new BadRequestException(
+        'User account does not have an email address',
+      );
+    }
+
+    const tenant =
+      await this.tenantsService.findByEmail(userEmail);
+
+    if (!tenant) {
+      throw new NotFoundException(
+        'Tenant profile not found for this account',
+      );
+    }
+
+    const tenantId = tenant._id;
+
+    /*
+     * Prevent duplicate pending requests.
+     */
+    const existing =
+      await this.bookingRequestModel.findOne({
+        tenant: tenantId,
+        unit: new Types.ObjectId(dto.unitId),
+        status: 'pending',
+      });
 
     if (existing) {
       throw new BadRequestException(
@@ -45,16 +87,40 @@ export class BookingRequestsService {
       );
     }
 
-    const unit = await this.bookingRequestModel.db
-      .collection('units')
-      .findOne({
-        _id: new Types.ObjectId(dto.unitId),
-      });
+    /*
+     * Get unit.
+     */
+    const unit =
+      await this.bookingRequestModel.db
+        .collection('units')
+        .findOne({
+          _id: new Types.ObjectId(dto.unitId),
+        });
 
     if (!unit) {
       throw new NotFoundException('Unit not found');
     }
 
+    /*
+     * Make sure the unit is available.
+     */
+    const unitStatus =
+      String(unit.status || 'available').toLowerCase();
+
+    if (
+      unitStatus === 'occupied' ||
+      unitStatus === 'rented' ||
+      unitStatus === 'maintenance' ||
+      unitStatus === 'under_maintenance'
+    ) {
+      throw new ConflictException(
+        'This unit is not available for booking',
+      );
+    }
+
+    /*
+     * Get property.
+     */
     const propertyId =
       unit.property ||
       unit.propertyId;
@@ -65,9 +131,13 @@ export class BookingRequestsService {
       );
     }
 
+    /*
+     * Create booking request using the
+     * actual Tenant ID.
+     */
     const request =
       await this.bookingRequestModel.create({
-        tenant: new Types.ObjectId(userId),
+        tenant: tenantId,
         unit: new Types.ObjectId(dto.unitId),
         property: new Types.ObjectId(propertyId),
         message: dto.message || '',
@@ -95,9 +165,36 @@ export class BookingRequestsService {
       throw new BadRequestException('Invalid user ID');
     }
 
+    /*
+     * Convert User ID -> Tenant ID.
+     */
+    const user =
+      await this.bookingRequestModel.db
+        .collection('users')
+        .findOne({
+          _id: new Types.ObjectId(userId),
+        });
+
+    if (!user?.email) {
+      throw new NotFoundException(
+        'User account not found',
+      );
+    }
+
+    const tenant =
+      await this.tenantsService.findByEmail(
+        user.email,
+      );
+
+    if (!tenant) {
+      throw new NotFoundException(
+        'Tenant profile not found for this account',
+      );
+    }
+
     return this.bookingRequestModel
       .find({
-        tenant: new Types.ObjectId(userId),
+        tenant: tenant._id,
       })
       .populate('unit')
       .populate('property')
@@ -147,7 +244,7 @@ export class BookingRequestsService {
     }
 
     /*
-     * Prevent approving the same request twice.
+     * Prevent approving an already-approved request.
      */
     if (
       status === 'approved' &&
@@ -157,9 +254,7 @@ export class BookingRequestsService {
     }
 
     /*
-     * REJECT REQUEST
-     *
-     * No lease should be created.
+     * Reject request.
      */
     if (status === 'rejected') {
       request.status = 'rejected';
@@ -170,17 +265,30 @@ export class BookingRequestsService {
     }
 
     /*
-     * APPROVE REQUEST
-     *
-     * Create an active lease for the tenant.
+     * Approve request.
      */
 
     const tenantId = request.tenant;
     const unitId = request.unit;
 
     /*
-     * Check whether this unit already has
-     * an active lease.
+     * Make sure the tenant exists.
+     */
+    const tenant =
+      await this.bookingRequestModel.db
+        .collection('tenants')
+        .findOne({
+          _id: tenantId,
+        });
+
+    if (!tenant) {
+      throw new NotFoundException(
+        'Tenant profile not found',
+      );
+    }
+
+    /*
+     * Check existing active lease.
      */
     const existingLease =
       await this.bookingRequestModel.db
@@ -197,7 +305,7 @@ export class BookingRequestsService {
     }
 
     /*
-     * Get the unit from MongoDB.
+     * Get unit.
      */
     const unit =
       await this.bookingRequestModel.db
@@ -213,7 +321,7 @@ export class BookingRequestsService {
     }
 
     /*
-     * Get monthly rent from the unit.
+     * Get monthly rent.
      */
     const monthlyRent = Number(
       unit.monthlyRent ??
@@ -222,11 +330,8 @@ export class BookingRequestsService {
     );
 
     /*
-     * Default security deposit to the
-     * monthly rent.
-     *
-     * This can later be changed from
-     * the lease management screen.
+     * Security deposit defaults to
+     * one month's rent.
      */
     const securityDeposit = monthlyRent;
 
@@ -236,7 +341,7 @@ export class BookingRequestsService {
     const startDate = new Date();
 
     /*
-     * Default lease period = 1 year.
+     * One-year lease.
      */
     const endDate = new Date(startDate);
 
@@ -245,7 +350,8 @@ export class BookingRequestsService {
     );
 
     /*
-     * Create the lease.
+     * Create lease using the REAL
+     * Tenant ID.
      */
     const leaseResult =
       await this.bookingRequestModel.db
@@ -267,7 +373,7 @@ export class BookingRequestsService {
         });
 
     /*
-     * Mark the unit as occupied.
+     * Mark unit as occupied.
      */
     await this.bookingRequestModel.db
       .collection('units')
@@ -284,16 +390,12 @@ export class BookingRequestsService {
       );
 
     /*
-     * Mark booking request as approved.
+     * Mark request approved.
      */
     request.status = 'approved';
 
     await request.save();
 
-    /*
-     * Return both the approved request
-     * and the newly-created lease.
-     */
     const approvedRequest =
       await this.findOne(id);
 
