@@ -29,6 +29,48 @@ export class Unit {
     required: true,
   })
   property!: Types.ObjectId;
+
+  // Main/general unit image
+  @Prop({
+    type: String,
+    default: '',
+  })
+  generalImage!: string;
+
+  // Bedroom image
+  @Prop({
+    type: String,
+    default: '',
+  })
+  bedroomImage!: string;
+
+  // Bathroom image
+  @Prop({
+    type: String,
+    default: '',
+  })
+  bathroomImage!: string;
+
+  // Toilet image
+  @Prop({
+    type: String,
+    default: '',
+  })
+  toiletImage!: string;
+
+  // Main image fallback
+  @Prop({
+    type: String,
+    default: '',
+  })
+  image!: string;
+
+  // All uploaded unit images
+  @Prop({
+    type: [String],
+    default: [],
+  })
+  images!: string[];
 }
 
 export const UnitSchema = SchemaFactory.createForClass(Unit);

@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsIn,
   IsInt,
   IsMongoId,
@@ -33,4 +34,35 @@ export class CreateUnitDto {
   @IsNotEmpty()
   @IsMongoId()
   property!: string;
+
+  // Main/general unit image
+  @IsOptional()
+  @IsString()
+  generalImage?: string;
+
+  // Bedroom image
+  @IsOptional()
+  @IsString()
+  bedroomImage?: string;
+
+  // Bathroom image
+  @IsOptional()
+  @IsString()
+  bathroomImage?: string;
+
+  // Toilet image
+  @IsOptional()
+  @IsString()
+  toiletImage?: string;
+
+  // Main image fallback
+  @IsOptional()
+  @IsString()
+  image?: string;
+
+  // All uploaded unit images
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
 }

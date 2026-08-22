@@ -31,11 +31,30 @@ export class UnitsService {
     }
 
     const unit = new this.unitModel({
-      ...createUnitDto,
+      unitNumber: createUnitDto.unitNumber,
+      floor: createUnitDto.floor,
+      bedrooms: createUnitDto.bedrooms,
+      monthlyRent: createUnitDto.monthlyRent,
+      status: createUnitDto.status || 'available',
       property: propertyId,
+
+      // Images
+      image: createUnitDto.image || '',
+      generalImage: createUnitDto.generalImage || '',
+      bedroomImage: createUnitDto.bedroomImage || '',
+      bathroomImage: createUnitDto.bathroomImage || '',
+      toiletImage: createUnitDto.toiletImage || '',
+      images: Array.isArray(createUnitDto.images)
+        ? createUnitDto.images.filter(Boolean)
+        : [],
     });
 
     const savedUnit = await unit.save();
+
+    await savedUnit.populate(
+      'property',
+      'name address city',
+    );
 
     return {
       message: 'Unit created successfully',
@@ -52,6 +71,10 @@ export class UnitsService {
   }
 
   async findOne(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Unit not found');
+    }
+
     const unit = await this.unitModel
       .findById(id)
       .populate('property', 'name address city')
@@ -65,6 +88,10 @@ export class UnitsService {
   }
 
   async findByProperty(propertyId: string) {
+    if (!Types.ObjectId.isValid(propertyId)) {
+      throw new NotFoundException('Property not found');
+    }
+
     return this.unitModel
       .find({
         property: new Types.ObjectId(propertyId),
@@ -78,20 +105,37 @@ export class UnitsService {
     id: string,
     updateData: Partial<CreateUnitDto>,
   ) {
-    if (updateData.property) {
-      updateData.property = new Types.ObjectId(
-        updateData.property,
-      ) as any;
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Unit not found');
     }
 
-    const unit = await this.unitModel.findByIdAndUpdate(
-      id,
-      updateData,
-      {
+    const data: Record<string, any> = {
+      ...updateData,
+    };
+
+    if (updateData.property) {
+      if (!Types.ObjectId.isValid(updateData.property)) {
+        throw new ConflictException(
+          'Invalid property ID',
+        );
+      }
+
+      data.property = new Types.ObjectId(
+        updateData.property,
+      );
+    }
+
+    if (Array.isArray(updateData.images)) {
+      data.images = updateData.images.filter(Boolean);
+    }
+
+    const unit = await this.unitModel
+      .findByIdAndUpdate(id, data, {
         new: true,
         runValidators: true,
-      },
-    );
+      })
+      .populate('property', 'name address city')
+      .exec();
 
     if (!unit) {
       throw new NotFoundException('Unit not found');
@@ -104,6 +148,10 @@ export class UnitsService {
   }
 
   async remove(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Unit not found');
+    }
+
     const unit = await this.unitModel.findByIdAndDelete(id);
 
     if (!unit) {
