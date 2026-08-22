@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -19,20 +20,63 @@ export class UsersController {
     private readonly usersService: UsersService,
   ) {}
 
-  // Create a user
+  /*
+   * PUBLIC TENANT REGISTRATION
+   *
+   * Every account created here gets:
+   * role = tenant
+   */
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
 
-  // Get all users - protected
+  /*
+   * CREATE ADMIN
+   *
+   * Only an authenticated admin can create
+   * another admin account.
+   */
+  @Post('admin')
+  @UseGuards(JwtAuthGuard)
+  createAdmin(
+    @Req() req: Request,
+    @Body()
+    body: {
+      name: string;
+      email: string;
+      password: string;
+    },
+  ) {
+    const user = req.user as {
+      role?: string;
+    };
+
+    if (user.role !== 'admin') {
+      throw new ForbiddenException(
+        'Only administrators can create admin accounts',
+      );
+    }
+
+    return this.usersService.createAdmin(
+      body.name,
+      body.email,
+      body.password,
+    );
+  }
+
+  /*
+   * GET ALL USERS
+   */
   @Get()
   @UseGuards(JwtAuthGuard)
   findAll() {
     return this.usersService.findAll();
   }
 
-  // Get logged-in user's profile - protected
+  /*
+   * GET LOGGED-IN USER
+   */
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   getProfile(@Req() req: Request) {
@@ -42,7 +86,9 @@ export class UsersController {
     };
   }
 
-  // Get one user - protected
+  /*
+   * GET ONE USER
+   */
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {

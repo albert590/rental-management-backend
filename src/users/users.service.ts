@@ -17,14 +17,22 @@ export class UsersService {
     private readonly userModel: Model<UserDocument>,
   ) {}
 
+  /*
+   * PUBLIC TENANT REGISTRATION
+   *
+   * Anyone can register through the public
+   * registration endpoint.
+   *
+   * Public registration ALWAYS creates a tenant.
+   * The client cannot choose the role.
+   */
   async create(createUserDto: CreateUserDto) {
     const email = createUserDto.email
       .toLowerCase()
       .trim();
 
-    const existingUser = await this.userModel.findOne({
-      email,
-    });
+    const existingUser =
+      await this.userModel.findOne({ email });
 
     if (existingUser) {
       throw new ConflictException(
@@ -38,19 +46,16 @@ export class UsersService {
     );
 
     const user = new this.userModel({
-      name: createUserDto.name,
+      name: createUserDto.name.trim(),
       email,
       password: hashedPassword,
-
-      // Public registration creates a tenant by default.
-      // An explicitly supplied role is still preserved.
-      role: createUserDto.role || 'tenant',
+      role: 'tenant',
     });
 
     const savedUser = await user.save();
 
     return {
-      message: 'User created successfully',
+      message: 'Tenant account created successfully',
       user: {
         id: savedUser._id,
         name: savedUser.name,
@@ -60,6 +65,63 @@ export class UsersService {
     };
   }
 
+  /*
+   * ADMIN CREATION
+   *
+   * This method is used only by the protected
+   * /users/admin endpoint.
+   *
+   * The controller checks that the logged-in
+   * user is an administrator before calling it.
+   */
+  async createAdmin(
+    name: string,
+    email: string,
+    password: string,
+  ) {
+    const normalizedEmail = email
+      .toLowerCase()
+      .trim();
+
+    const existingUser =
+      await this.userModel.findOne({
+        email: normalizedEmail,
+      });
+
+    if (existingUser) {
+      throw new ConflictException(
+        'Email already exists',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      10,
+    );
+
+    const admin = new this.userModel({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: 'admin',
+    });
+
+    const savedAdmin = await admin.save();
+
+    return {
+      message: 'Admin account created successfully',
+      user: {
+        id: savedAdmin._id,
+        name: savedAdmin.name,
+        email: savedAdmin.email,
+        role: savedAdmin.role,
+      },
+    };
+  }
+
+  /*
+   * GET ALL USERS
+   */
   async findAll() {
     return this.userModel
       .find()
@@ -68,6 +130,9 @@ export class UsersService {
       .exec();
   }
 
+  /*
+   * GET ONE USER
+   */
   async findOne(id: string) {
     const user = await this.userModel
       .findById(id)
@@ -75,12 +140,17 @@ export class UsersService {
       .exec();
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException(
+        'User not found',
+      );
     }
 
     return user;
   }
 
+  /*
+   * FIND USER BY EMAIL
+   */
   async findByEmail(email: string) {
     return this.userModel
       .findOne({
@@ -89,6 +159,9 @@ export class UsersService {
       .exec();
   }
 
+  /*
+   * FIND USER BY PASSWORD RESET TOKEN
+   */
   async findByResetToken(token: string) {
     return this.userModel
       .findOne({
